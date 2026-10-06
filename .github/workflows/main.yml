@@ -1,4 +1,4 @@
-name: Gerar APK Vs Autoatendimento 
+name: VS Autoatendimento V11
 
 on:
   workflow_dispatch:
@@ -8,16 +8,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Baixar arquivos do repositório
+
+      - name: Baixar arquivos do repositorio
         uses: actions/checkout@v4
 
-      - name: Preparar projeto Android
+      - name: Preparar projeto VS Autoatendimento V11
         run: |
-          unzip -o Vs_Autoatendimento_v11.zip
-          cd vila_android
-          echo "Projeto preparado"
+          mkdir vs_autoatendimento
+          unzip -o VS_Autoatendimento_v11.zip -d vs_autoatendimento
+          cd vs_autoatendimento
+          echo "Projeto VS Autoatendimento V11 preparado"
 
-      - name: Configurar Java
+      - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -28,13 +30,13 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Compilar APK
+      - name: Compilar APK VS Autoatendimento V11
         run: |
-          cd vS_android
+          cd vs_autoatendimento
           gradle assembleDebug
 
-      - name: Disponibilizar APK
+      - name: Disponibilizar APK VS Autoatendimento V11
         uses: actions/upload-artifact@v4
         with:
-          name: VS-Autoatendimento-APK
-          path: vS_android/app/build/outputs/apk/debug/app-debug.apk
+          name: VS-Autoatendimento-V11-APK
+          path: vs_autoatendimento/app/build/outputs/apk/debug/app-debug.apk
