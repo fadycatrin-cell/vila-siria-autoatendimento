@@ -13,7 +13,7 @@ jobs:
 
       - name: Preparar projeto Android
         run: |
-          unzip -o Vila_Siria_Autoatendimento_v6.zip
+          unzip -o Vila_Siria_Autoatendimento_v7.zip
           cd vila_android
           echo "Projeto preparado"
 
