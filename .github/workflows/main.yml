@@ -15,7 +15,7 @@ jobs:
       - name: Preparar projeto VS Autoatendimento V11
         run: |
           mkdir vs_autoatendimento
-          unzip -o VS_Autoatendimento_v11.zip -d vs_autoatendimento
+          unzip -o VS_Autoatendimento_v11.2.zip -d vs_autoatendimento
           cd vs_autoatendimento
           echo "Projeto VS Autoatendimento V11 preparado"
 
