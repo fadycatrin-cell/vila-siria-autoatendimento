@@ -15,7 +15,7 @@ jobs:
       - name: Preparar projeto VS Autoatendimento V11.2
         run: |
           mkdir -p vs_autoatendimento
-          unzip -o VS_Autoatendimento_V11_2_sem_grupos.zip -d vs_autoatendimento
+          unzip -o VS_Autoatendimento_V11_2_sem_grupos_sem_resposta_padrao.zip -d vs_autoatendimento
           echo "Projeto VS Autoatendimento V11.2 preparado"
 
       - name: Configurar Java 17
