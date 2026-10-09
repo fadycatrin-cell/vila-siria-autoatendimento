@@ -12,10 +12,10 @@ jobs:
       - name: Baixar arquivos do repositorio
         uses: actions/checkout@v4
 
-      - name: Preparar projeto WA V12
+      - name: Preparar projeto WA Autoatendimento V12
         run: |
           mkdir -p wa_autoatendimento
-          unzip -o WA_Autoatendimento_v12.zip -d wa_autoatendimento
+          unzip -o WA_Autoatendimento_v12_com_restaurar_backup.zip -d wa_autoatendimento
           echo "Projeto WA preparado"
 
       - name: Configurar Java 17
