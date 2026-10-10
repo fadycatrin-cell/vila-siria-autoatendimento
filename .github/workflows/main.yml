@@ -1,24 +1,39 @@
 
-name: WA Autoatendimento V12
+name: WA Autoatendimento V14 - Gerador APK
 
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
+    name: Gerar APK V14 original
     runs-on: ubuntu-latest
 
     steps:
-      - name: Baixar arquivos do repositorio
+      - name: Baixar repositorio
         uses: actions/checkout@v4
 
-      - name: Preparar projeto WA Autoatendimento V12
+      - name: Conferir arquivo original
+        run: |
+          test -f WA_Autoatendimento_V14_Layout_Historico_Perguntas.zip
+          unzip -t WA_Autoatendimento_V14_Layout_Historico_Perguntas.zip
+
+      - name: Extrair projeto V14
         run: |
           mkdir -p wa_autoatendimento
-          unzip -o WA_Autoatendimento_v12_com_restaurar_backup.zip -d wa_autoatendimento
-          echo "Projeto WA preparado"
+          unzip -o WA_Autoatendimento_V14_Layout_Historico_Perguntas.zip \
+            -d wa_autoatendimento
 
-      - name: Configurar Java 17
+      - name: Localizar projeto Android
+        run: |
+          find wa_autoatendimento -name gradlew -o -name settings.gradle -o -name settings.gradle.kts
+          test -f wa_autoatendimento/settings.gradle || \
+            test -f wa_autoatendimento/settings.gradle.kts
+
+      - name: Configurar Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -29,13 +44,20 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Compilar APK
+      - name: Compilar projeto original
         run: |
           cd wa_autoatendimento
-          gradle assembleDebug
+          gradle --no-daemon assembleDebug
 
-      - name: Disponibilizar APK
+      - name: Verificar APK gerado
+        run: |
+          find wa_autoatendimento -path '*/build/outputs/apk/*.apk' -type f
+          test -f wa_autoatendimento/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
-          name: WA-Autoatendimento-V12-APK
+          name: WA-Autoatendimento-V14-APK
           path: wa_autoatendimento/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
