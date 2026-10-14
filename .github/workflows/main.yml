@@ -19,38 +19,63 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Localizar e extrair projeto V16.2.7
+      - name: Localizar projeto ou extrair ZIP V16.2.7
         shell: bash
         run: |
           set -euo pipefail
-          ZIP="WA_Autoatendimento_V16_2_7_SELETOR_SONS.zip"
-          test -f "$ZIP" || { echo "ERRO: ZIP não encontrado: $ZIP"; exit 1; }
-          mkdir -p "$RUNNER_TEMP/projeto-v1627"
-          unzip -oq "$ZIP" -d "$RUNNER_TEMP/projeto-v1627"
-          PROJECT="$RUNNER_TEMP/projeto-v1627"
-          test -f "$PROJECT/settings.gradle" || { echo "ERRO: settings.gradle ausente na raiz do ZIP"; find "$PROJECT" -maxdepth 4 -type f | head -100; exit 1; }
-          test -f "$PROJECT/app/build.gradle" || { echo "ERRO: app/build.gradle ausente"; exit 1; }
-          echo "PROJECT_DIR=$PROJECT" >> "$GITHUB_ENV"
+          ROOT="$GITHUB_WORKSPACE"
+          BUILD_ROOT="$RUNNER_TEMP/wa-v1627-build"
+          mkdir -p "$BUILD_ROOT"
 
-      - name: Configurar Gradle 8.7
+          # Se os arquivos Gradle já estiverem no repositório, use a pasta do projeto.
+          SETTINGS="$(find "$ROOT" -type f \( -name settings.gradle -o -name settings.gradle.kts \) -not -path '*/.gradle/*' -print -quit || true)"
+
+          if [ -n "$SETTINGS" ]; then
+            PROJECT_DIR="$(dirname "$SETTINGS")"
+          else
+            # Procura o ZIP da versão em qualquer subpasta, sem depender do nome exato.
+            ZIP="$(find "$ROOT" -type f -iname '*v16*2*7*.zip' -print -quit || true)"
+            if [ -z "$ZIP" ]; then
+              echo 'ERRO: não encontrei o projeto Android nem um ZIP da versão 16.2.7 no repositório.'
+              echo 'Arquivos ZIP encontrados:'
+              find "$ROOT" -type f -iname '*.zip' -print || true
+              echo 'Arquivos na raiz:'
+              ls -la "$ROOT"
+              exit 1
+            fi
+            unzip -oq "$ZIP" -d "$BUILD_ROOT"
+            SETTINGS="$(find "$BUILD_ROOT" -type f \( -name settings.gradle -o -name settings.gradle.kts \) -not -path '*/.gradle/*' -print -quit || true)"
+            if [ -z "$SETTINGS" ]; then
+              echo 'ERRO: o ZIP foi encontrado, mas não contém settings.gradle ou settings.gradle.kts.'
+              find "$BUILD_ROOT" -maxdepth 4 -type f | head -100
+              exit 1
+            fi
+            PROJECT_DIR="$(dirname "$SETTINGS")"
+          fi
+
+          if [ ! -f "$PROJECT_DIR/app/build.gradle" ] && [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
+            echo "ERRO: projeto Gradle encontrado, mas app/build.gradle não existe em: $PROJECT_DIR"
+            find "$PROJECT_DIR" -maxdepth 3 -type f | head -100
+            exit 1
+          fi
+
+          echo "Projeto selecionado: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      - name: Compilar e mostrar erros Java completos
+      - name: Compilar APK e registrar erro completo
         shell: bash
         run: |
           set +e
           cd "$PROJECT_DIR"
-          gradle --no-daemon --console=plain clean assembleDebug --stacktrace --info 2>&1 | tee "$RUNNER_TEMP/build.log"
-          STATUS=${PIPESTATUS[0]}
-          echo ""
-          echo "========== DIAGNÓSTICO JAVA =========="
-          echo 'Capturando diagnóstico do compilador acima.'
-          if [ "$STATUS" -ne 0 ]; then
-            grep -n -B 4 -A 8 -E 'error:|cannot find symbol|illegal start|reached end of file|does not override|incompatible types|package .* does not exist|symbol:' "$RUNNER_TEMP/build.log" || true
-            exit "$STATUS"
-          fi
+          gradle --no-daemon --stacktrace --console=plain assembleDebug 2>&1 | tee "$RUNNER_TEMP/wa-v1627-build.log"
+          RESULT=${PIPESTATUS[0]}
+          echo "BUILD_EXIT_CODE=$RESULT" >> "$GITHUB_ENV"
+          exit "$RESULT"
 
       - name: Disponibilizar APK
         if: success()
@@ -61,11 +86,11 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Disponibilizar log de compilação se falhar
+      - name: Disponibilizar log completo se falhar
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: WA-V16.2.7-log-de-compilacao
-          path: ${{ runner.temp }}/build.log
+          name: WA-Autoatendimento-V16.2.7-log-compilacao
+          path: ${{ runner.temp }}/wa-v1627-build.log
           if-no-files-found: warn
           retention-days: 7
