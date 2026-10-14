@@ -9,10 +9,9 @@ permissions:
 jobs:
   gerar-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
 
     steps:
-      - name: Baixar projeto
+      - name: Baixar arquivos do repositorio
         uses: actions/checkout@v4
 
       - name: Configurar Java 17
@@ -21,43 +20,67 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Localizar e extrair projeto corrigido V16.2.7
+      - name: Localizar e extrair projeto V16.2.7
         shell: bash
         run: |
           set -euo pipefail
-          ZIP="$(find "$GITHUB_WORKSPACE" -type f -iname 'WA_Autoatendimento_V16_2_7_SELETOR_SONS_CORRIGIDO.zip' -print -quit)"
+
+          echo "Arquivos ZIP encontrados no repositorio:"
+          find . -type f -iname '*.zip' -not -path './.git/*' -print
+
+          ZIP=""
+          if [ -f "./WA_Autoatendimento_V16_2_7_SELETOR_SONS_CORRIGIDO.zip" ]; then
+            ZIP="./WA_Autoatendimento_V16_2_7_SELETOR_SONS_CORRIGIDO.zip"
+          else
+            ZIP="$(find . -type f -iname 'WA_Autoatendimento_V16_2_7_SELETOR_SONS*.zip' -not -path './.git/*' -print | sort | head -n 1)"
+          fi
+
           if [ -z "$ZIP" ]; then
-            echo "::error::Envie o ZIP WA_Autoatendimento_V16_2_7_SELETOR_SONS_CORRIGIDO.zip para a raiz do repositório."
-            find "$GITHUB_WORKSPACE" -maxdepth 3 -type f | sort | head -100
+            echo "ERRO: nenhum ZIP V16.2.7 encontrado."
             exit 1
           fi
-          BUILD_ROOT="$RUNNER_TEMP/wa-v1627"
-          mkdir -p "$BUILD_ROOT"
-          unzip -oq "$ZIP" -d "$BUILD_ROOT"
-          SETTINGS="$(find "$BUILD_ROOT" -type f -name settings.gradle -print -quit)"
-          if [ -z "$SETTINGS" ]; then
-            echo "::error::settings.gradle não encontrado dentro do ZIP."
-            find "$BUILD_ROOT" -maxdepth 4 -type f | head -100
+
+          echo "Usando pacote: $ZIP"
+          mkdir -p "$RUNNER_TEMP/projeto-v1627"
+          unzip -oq "$ZIP" -d "$RUNNER_TEMP/projeto-v1627"
+
+          PROJECT=""
+          while IFS= read -r SETTINGS; do
+            CANDIDATE="$(dirname "$SETTINGS")"
+            if [ -f "$CANDIDATE/app/build.gradle" ]; then
+              PROJECT="$CANDIDATE"
+              break
+            fi
+          done < <(find "$RUNNER_TEMP/projeto-v1627" -type f -name settings.gradle -not -path '*/.gradle/*')
+
+          if [ -z "$PROJECT" ]; then
+            echo "ERRO: não encontrei settings.gradle junto de app/build.gradle."
+            find "$RUNNER_TEMP/projeto-v1627" -maxdepth 5 -type f | head -100
             exit 1
           fi
-          PROJECT_DIR="$(dirname "$SETTINGS")"
-          test -f "$PROJECT_DIR/app/build.gradle"
-          test -f "$PROJECT_DIR/app/src/main/java/com/autoatendimento/app/MainActivity.java"
-          test -f "$PROJECT_DIR/app/src/main/java/com/autoatendimento/app/WhatsAppNotificationService.java"
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Projeto V16.2.7 corrigido localizado."
+
+          echo "Projeto Android encontrado em: $PROJECT"
+          echo "PROJECT_DIR=$PROJECT" >> "$GITHUB_ENV"
 
       - name: Configurar Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      - name: Compilar APK
+      - name: Compilar APK e mostrar erro completo
         shell: bash
         run: |
-          set -o pipefail
+          set -uo pipefail
           cd "$PROJECT_DIR"
-          gradle --no-daemon --console=plain clean assembleDebug 2>&1 | tee "$RUNNER_TEMP/wa-v1627-build.log"
+          set +e
+          gradle --no-daemon assembleDebug --stacktrace --info 2>&1 | tee "$RUNNER_TEMP/compilacao.log"
+          RESULT=${PIPESTATUS[0]}
+          set -e
+          if [ "$RESULT" -ne 0 ]; then
+            echo "COMPILAÇÃO FALHOU. Erros relevantes:"
+            grep -n -B 4 -A 8 -E 'error:|What went wrong:|Could not|FAILURE:' "$RUNNER_TEMP/compilacao.log" | tail -160 || true
+            exit "$RESULT"
+          fi
 
       - name: Disponibilizar APK
         if: success()
@@ -68,11 +91,11 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Disponibilizar log se a compilação falhar
+      - name: Disponibilizar log completo se falhar
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: WA-Autoatendimento-V16.2.7-log
-          path: ${{ runner.temp }}/wa-v1627-build.log
-          if-no-files-found: warn
+          name: log-compilacao-v16.2.7
+          path: ${{ runner.temp }}/compilacao.log
+          if-no-files-found: ignore
           retention-days: 7
