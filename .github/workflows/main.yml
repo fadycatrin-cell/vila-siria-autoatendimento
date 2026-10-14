@@ -9,8 +9,10 @@ permissions:
 jobs:
   gerar-apk:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
-      - name: Baixar arquivos do repositório
+      - name: Baixar projeto
         uses: actions/checkout@v4
 
       - name: Configurar Java 17
@@ -19,63 +21,43 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Localizar projeto ou extrair ZIP V16.2.7
+      - name: Localizar e extrair projeto corrigido V16.2.7
         shell: bash
         run: |
           set -euo pipefail
-          ROOT="$GITHUB_WORKSPACE"
-          BUILD_ROOT="$RUNNER_TEMP/wa-v1627-build"
-          mkdir -p "$BUILD_ROOT"
-
-          # Se os arquivos Gradle já estiverem no repositório, use a pasta do projeto.
-          SETTINGS="$(find "$ROOT" -type f \( -name settings.gradle -o -name settings.gradle.kts \) -not -path '*/.gradle/*' -print -quit || true)"
-
-          if [ -n "$SETTINGS" ]; then
-            PROJECT_DIR="$(dirname "$SETTINGS")"
-          else
-            # Procura o ZIP da versão em qualquer subpasta, sem depender do nome exato.
-            ZIP="$(find "$ROOT" -type f -iname '*v16*2*7*.zip' -print -quit || true)"
-            if [ -z "$ZIP" ]; then
-              echo 'ERRO: não encontrei o projeto Android nem um ZIP da versão 16.2.7 no repositório.'
-              echo 'Arquivos ZIP encontrados:'
-              find "$ROOT" -type f -iname '*.zip' -print || true
-              echo 'Arquivos na raiz:'
-              ls -la "$ROOT"
-              exit 1
-            fi
-            unzip -oq "$ZIP" -d "$BUILD_ROOT"
-            SETTINGS="$(find "$BUILD_ROOT" -type f \( -name settings.gradle -o -name settings.gradle.kts \) -not -path '*/.gradle/*' -print -quit || true)"
-            if [ -z "$SETTINGS" ]; then
-              echo 'ERRO: o ZIP foi encontrado, mas não contém settings.gradle ou settings.gradle.kts.'
-              find "$BUILD_ROOT" -maxdepth 4 -type f | head -100
-              exit 1
-            fi
-            PROJECT_DIR="$(dirname "$SETTINGS")"
-          fi
-
-          if [ ! -f "$PROJECT_DIR/app/build.gradle" ] && [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
-            echo "ERRO: projeto Gradle encontrado, mas app/build.gradle não existe em: $PROJECT_DIR"
-            find "$PROJECT_DIR" -maxdepth 3 -type f | head -100
+          ZIP="$(find "$GITHUB_WORKSPACE" -type f -iname 'WA_Autoatendimento_V16_2_7_SELETOR_SONS_CORRIGIDO.zip' -print -quit)"
+          if [ -z "$ZIP" ]; then
+            echo "::error::Envie o ZIP WA_Autoatendimento_V16_2_7_SELETOR_SONS_CORRIGIDO.zip para a raiz do repositório."
+            find "$GITHUB_WORKSPACE" -maxdepth 3 -type f | sort | head -100
             exit 1
           fi
-
-          echo "Projeto selecionado: $PROJECT_DIR"
+          BUILD_ROOT="$RUNNER_TEMP/wa-v1627"
+          mkdir -p "$BUILD_ROOT"
+          unzip -oq "$ZIP" -d "$BUILD_ROOT"
+          SETTINGS="$(find "$BUILD_ROOT" -type f -name settings.gradle -print -quit)"
+          if [ -z "$SETTINGS" ]; then
+            echo "::error::settings.gradle não encontrado dentro do ZIP."
+            find "$BUILD_ROOT" -maxdepth 4 -type f | head -100
+            exit 1
+          fi
+          PROJECT_DIR="$(dirname "$SETTINGS")"
+          test -f "$PROJECT_DIR/app/build.gradle"
+          test -f "$PROJECT_DIR/app/src/main/java/com/autoatendimento/app/MainActivity.java"
+          test -f "$PROJECT_DIR/app/src/main/java/com/autoatendimento/app/WhatsAppNotificationService.java"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Projeto V16.2.7 corrigido localizado."
 
-      - name: Configurar Gradle
+      - name: Configurar Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      - name: Compilar APK e registrar erro completo
+      - name: Compilar APK
         shell: bash
         run: |
-          set +e
+          set -o pipefail
           cd "$PROJECT_DIR"
-          gradle --no-daemon --stacktrace --console=plain assembleDebug 2>&1 | tee "$RUNNER_TEMP/wa-v1627-build.log"
-          RESULT=${PIPESTATUS[0]}
-          echo "BUILD_EXIT_CODE=$RESULT" >> "$GITHUB_ENV"
-          exit "$RESULT"
+          gradle --no-daemon --console=plain clean assembleDebug 2>&1 | tee "$RUNNER_TEMP/wa-v1627-build.log"
 
       - name: Disponibilizar APK
         if: success()
@@ -86,11 +68,11 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Disponibilizar log completo se falhar
+      - name: Disponibilizar log se a compilação falhar
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: WA-Autoatendimento-V16.2.7-log-compilacao
+          name: WA-Autoatendimento-V16.2.7-log
           path: ${{ runner.temp }}/wa-v1627-build.log
           if-no-files-found: warn
           retention-days: 7
